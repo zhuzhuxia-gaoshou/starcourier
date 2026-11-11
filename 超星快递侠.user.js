@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         超星快递侠 - 学习通资源下载器
 // @namespace    https://github.com/zhuzhuxia-gaoshou
-// @version      1.3.0
+// @version      1.4.0
 // @description  超星学习通资源下载器:PPT/PDF/视频批量下载,云盘文件签名直链,失败自动切换浏览器原生下载。熔核反应堆 UI,可拖动,光环实时显示派送进度。
 // @author       zhuzhuxia-gaoshou
 // @match        *://*.chaoxing.com/*
@@ -481,19 +481,43 @@
             }
         }
         // 兜底:没有标准资源容器时(如"资料"列表页),
-        // 从整个页面的链接、iframe 地址和原始 HTML 里提取 objectid
+        // 依次扫描:当前 URL → 页面链接/iframe → 整个 HTML(含 JSON 数据、data 属性、预览函数调用)
         if (objectids.length === 0) {
-            const html = document.documentElement.outerHTML;
-            const patterns = [
-                /(?:\?|&)[Oo]bject[Ii]d=([0-9a-fA-F]{32})/g,
-                /\/ananas\/(?:iframe|video|read)\/([0-9a-fA-F]{32})/g
-            ];
-            for (const re of patterns) {
-                let m;
-                while ((m = re.exec(html)) !== null) objectids.push(m[1]);
-            }
+            const scanIds = (text) => {
+                const patterns = [
+                    /(?:\?|&)[Oo]bject[Ii]d=([0-9a-zA-Z]{15,50})/g,
+                    /\/ananas\/[a-zA-Z/]*?\/?([0-9a-zA-Z]{20,50})/g,
+                    /["'](?:fileId|objectId|fileid|objectid)["']\s*:\s*["']([0-9a-zA-Z]{15,50})["']/g,
+                    /(?:previewFile|showFile|openFile)\(\s*["']([0-9a-zA-Z]{15,50})["']/g,
+                    /data-(?:fileid|objectid)="([0-9a-zA-Z]{15,50})"/g
+                ];
+                const found = [];
+                for (const re of patterns) {
+                    re.lastIndex = 0;
+                    let m;
+                    while ((m = re.exec(text)) !== null) found.push(m[1]);
+                }
+                return found;
+            };
+            objectids.push(...scanIds(location.href));
+            objectids.push(...scanIds(document.documentElement.outerHTML));
             objectids = [...new Set(objectids)];
-            console.log("兜底扫描找到的 objectid:", objectids);
+
+            if (objectids.length === 0) {
+                // 仍找不到:输出页面诊断,方便定位资料页的数据存储方式
+                const html = document.documentElement.outerHTML;
+                const diag = {
+                    页面: location.href.slice(0, 120),
+                    ananas出现次数: (html.match(/ananas/g) || []).length,
+                    fileId出现次数: (html.match(/fileId/gi) || []).length,
+                    objectid出现次数: (html.match(/objectid/gi) || []).length,
+                    相关链接样例: [...document.querySelectorAll("a[href], iframe[src]")]
+                        .map(x => x.href || x.src)
+                        .filter(h => /file|ananas|preview|object/i.test(h))
+                        .slice(0, 10)
+                };
+                console.log("[快递侠] 页面诊断(请把这段 JSON 复制发给开发者):", JSON.stringify(diag, null, 2));
+            }
         }
 
         // Remove duplicates
@@ -1136,7 +1160,7 @@
         const objectids = get_objectids();
         if (objectids.length === 0) {
             hideTipsDiv();
-            showTip("未找到任何资源对象ID。", 3000, true);
+            showTip("未扫到资源ID。试试:点开一个文件预览后再点启动器", 6000, true);
             return;
         }
 
@@ -1198,7 +1222,7 @@
         const objectids = get_objectids();
         if (objectids.length === 0) {
             hideTipsDiv();
-            showTip("未找到任何资源对象ID。", 3000, true);
+            showTip("未扫到资源ID。试试:点开一个文件预览后再点启动器", 6000, true);
             return;
         }
 
@@ -1365,6 +1389,6 @@
     });
 
 
-    console.log("超星快递侠 v1.3.0 — 学习通资源下载器已加载(全站模式)");
+    console.log("超星快递侠 v1.4.0 — 学习通资源下载器已加载(全站模式)");
 
 })();
