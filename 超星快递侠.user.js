@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         超星快递侠 - 学习通资源下载器
 // @namespace    https://github.com/zhuzhuxia-gaoshou
-// @version      1.4.0
+// @version      1.5.0
 // @description  超星学习通资源下载器:PPT/PDF/视频批量下载,云盘文件签名直链,失败自动切换浏览器原生下载。熔核反应堆 UI,可拖动,光环实时显示派送进度。
 // @author       zhuzhuxia-gaoshou
 // @match        *://*.chaoxing.com/*
@@ -480,27 +480,44 @@
                  }
             }
         }
-        // 兜底:没有标准资源容器时(如"资料"列表页),
-        // 依次扫描:当前 URL → 页面链接/iframe → 整个 HTML(含 JSON 数据、data 属性、预览函数调用)
+        // 兜底扫描 v2:当前 URL → 主文档 HTML → 递归钻入所有可访问 iframe 的地址和文档
+        // (资料页的文件预览是嵌套 iframe,objectid 藏在里层 —— 参考社区方案的做法)
+        const scanIds = (text) => {
+            if (!text) return [];
+            const patterns = [
+                /(?:\?|&)[Oo]bject[Ii]d=([0-9a-fA-F]{32})/g,
+                /objectid["']?\s*[:=]\s*["']?([0-9a-fA-F]{32})/gi,
+                /\/ananas\/[a-zA-Z/]*?\/?([0-9a-zA-Z]{20,50})/g,
+                /["'](?:fileId|objectId|fileid|objectid)["']\s*:\s*["']([0-9a-zA-Z]{15,50})["']/g,
+                /(?:previewFile|showFile|openFile)\(\s*["']([0-9a-zA-Z]{15,50})["']/g,
+                /data-(?:fileid|objectid)="([0-9a-zA-Z]{15,50})"/g
+            ];
+            const found = [];
+            for (const re of patterns) {
+                re.lastIndex = 0;
+                let m;
+                while ((m = re.exec(text)) !== null) found.push(m[1]);
+            }
+            return found;
+        };
+        const deepScanIframes = (doc, depth, out) => {
+            if (depth > 5) return;
+            for (const f of doc.querySelectorAll("iframe")) {
+                try { if (f.src) out.push(...scanIds(f.src)); } catch (e) {}
+                try {
+                    const idoc = f.contentDocument;
+                    if (idoc && idoc.body) {
+                        out.push(...scanIds(idoc.documentElement.outerHTML.slice(0, 500000)));
+                        deepScanIframes(idoc, depth + 1, out);
+                    }
+                } catch (e) { /* 跨域 iframe:src 已扫,文档跳过 */ }
+            }
+        };
+
         if (objectids.length === 0) {
-            const scanIds = (text) => {
-                const patterns = [
-                    /(?:\?|&)[Oo]bject[Ii]d=([0-9a-zA-Z]{15,50})/g,
-                    /\/ananas\/[a-zA-Z/]*?\/?([0-9a-zA-Z]{20,50})/g,
-                    /["'](?:fileId|objectId|fileid|objectid)["']\s*:\s*["']([0-9a-zA-Z]{15,50})["']/g,
-                    /(?:previewFile|showFile|openFile)\(\s*["']([0-9a-zA-Z]{15,50})["']/g,
-                    /data-(?:fileid|objectid)="([0-9a-zA-Z]{15,50})"/g
-                ];
-                const found = [];
-                for (const re of patterns) {
-                    re.lastIndex = 0;
-                    let m;
-                    while ((m = re.exec(text)) !== null) found.push(m[1]);
-                }
-                return found;
-            };
             objectids.push(...scanIds(location.href));
-            objectids.push(...scanIds(document.documentElement.outerHTML));
+            objectids.push(...scanIds(document.documentElement.outerHTML.slice(0, 2000000)));
+            deepScanIframes(document, 0, objectids);
             objectids = [...new Set(objectids)];
 
             if (objectids.length === 0) {
@@ -508,12 +525,13 @@
                 const html = document.documentElement.outerHTML;
                 const diag = {
                     页面: location.href.slice(0, 120),
+                    iframe数量: document.querySelectorAll("iframe").length,
                     ananas出现次数: (html.match(/ananas/g) || []).length,
                     fileId出现次数: (html.match(/fileId/gi) || []).length,
                     objectid出现次数: (html.match(/objectid/gi) || []).length,
                     相关链接样例: [...document.querySelectorAll("a[href], iframe[src]")]
                         .map(x => x.href || x.src)
-                        .filter(h => /file|ananas|preview|object/i.test(h))
+                        .filter(h => /file|ananas|preview|object|pan-yz/i.test(h))
                         .slice(0, 10)
                 };
                 console.log("[快递侠] 页面诊断(请把这段 JSON 复制发给开发者):", JSON.stringify(diag, null, 2));
@@ -1389,6 +1407,6 @@
     });
 
 
-    console.log("超星快递侠 v1.4.0 — 学习通资源下载器已加载(全站模式)");
+    console.log("超星快递侠 v1.5.0 — 学习通资源下载器已加载(全站模式+深挖iframe)");
 
 })();
