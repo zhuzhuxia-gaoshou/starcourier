@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         超星快递侠 - 学习通资源下载器
 // @namespace    https://github.com/zhuzhuxia-gaoshou
-// @version      1.6.1
+// @version      1.6.2
 // @description  超星学习通资源下载器:PPT/PDF/视频批量下载,云盘文件签名直链,失败自动切换浏览器原生下载。熔核反应堆 UI,可拖动,光环实时显示派送进度。
 // @author       zhuzhuxia-gaoshou
 // @match        *://*.chaoxing.com/*
@@ -711,7 +711,9 @@
             }
              resource.downloadUrl = fileUrl;
 
-
+            if (!resource.downloadUrl) {
+                resource.error = "接口未返回下载地址";
+            }
         } catch (error) {
             console.error(`获取资源 ${objectid} 信息失败:`, error);
             resource.error = `获取失败 (${error.message})`;
@@ -1248,7 +1250,16 @@
         const validResources = resources.filter(res => !res.error && (res.downloadUrl || res.openDirectly));
 
         if (validResources.length === 0) {
-            showTip("未找到可下载的资源。", 3000, true);
+            if (resources.length === 0) {
+                showTip("未找到可下载的资源。", 3000, true);
+                return;
+            }
+            // 资源找到了但全部查询失败:把详情弹出来,每行右侧显示具体失败原因
+            const modal = createModalElement();
+            populateModalList(modal.list, resources, false);
+            modal.subtitle.textContent = `找到 ${resources.length} 个资源,但均不可下载(原因见每行右侧)`;
+            modal.overlay.style.display = 'flex';
+            showTip("资源 ID 找到了,但查询详情失败 —— 具体原因在每行右侧,截图发我", 10000, true);
             return;
         }
 
