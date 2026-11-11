@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         超星快递侠 - 学习通资源下载器
 // @namespace    https://github.com/zhuzhuxia-gaoshou
-// @version      1.6.2
+// @version      1.6.3
 // @description  超星学习通资源下载器:PPT/PDF/视频批量下载,云盘文件签名直链,失败自动切换浏览器原生下载。熔核反应堆 UI,可拖动,光环实时显示派送进度。
 // @author       zhuzhuxia-gaoshou
 // @match        *://*.chaoxing.com/*
@@ -646,6 +646,7 @@
                     GM_xmlhttpRequest({
                         method: "GET",
                         url,
+                        headers: { "Referer": "https://mooc2-ans.chaoxing.com/" },
                         timeout: 20000,
                         onload: (r) => {
                             if (r.status !== 200) return reject(new Error("HTTP " + r.status));
@@ -1486,6 +1487,6 @@
     });
 
 
-    console.log("超星快递侠 v1.6.1 — 学习通资源下载器已加载(全站+响应嗅探+跨域查询)");
+    console.log("超星快递侠 v1.6.3 — 学习通资源下载器已加载(全站+嗅探+Referer修复)");
 
 })();
