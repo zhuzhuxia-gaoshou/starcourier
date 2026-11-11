@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         超星快递侠 - 学习通资源下载器
 // @namespace    https://github.com/zhuzhuxia-gaoshou
-// @version      1.5.0
+// @version      1.6.0
 // @description  超星学习通资源下载器:PPT/PDF/视频批量下载,云盘文件签名直链,失败自动切换浏览器原生下载。熔核反应堆 UI,可拖动,光环实时显示派送进度。
 // @author       zhuzhuxia-gaoshou
 // @match        *://*.chaoxing.com/*
 // @match        *://*.xueyinonline.com/*
-// @noframes
+// @run-at       document-start
 // @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
@@ -20,6 +20,35 @@
 
 (function () {
     "use strict";
+
+    // —— 响应嗅探:页面后台拉取的文件列表数据存在 JS 内存里(DOM 扫不到),在这里截获 ——
+    window.__cxdFileIds = window.__cxdFileIds || new Set();
+    const cxdHarvestIds = (text) => {
+        try {
+            if (!text || typeof text !== "string" || text.length > 3000000) return;
+            if (!/^\s*[{\[]/.test(text)) return; // 只处理 JSON 形态的响应
+            const re = /"(?:fileId|objectId|objectid|fileid)"\s*:\s*"([0-9a-zA-Z]{15,50})"/g;
+            let m;
+            while ((m = re.exec(text)) !== null) window.__cxdFileIds.add(m[1]);
+        } catch (e) {}
+    };
+    if (typeof window.fetch === "function") {
+        const cxdOrigFetch = window.fetch;
+        window.fetch = function (...args) {
+            const p = cxdOrigFetch.apply(this, args);
+            try {
+                p.then((r) => { try { r.clone().text().then(cxdHarvestIds).catch(() => {}); } catch (e) {} }).catch(() => {});
+            } catch (e) {}
+            return p;
+        };
+    }
+    const cxdOrigXHROpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function (method, url) {
+        this.addEventListener("load", function () {
+            try { cxdHarvestIds(this.responseText); } catch (e) {}
+        });
+        return cxdOrigXHROpen.apply(this, arguments);
+    };
 
     // --- Styles ---
     // 超星快递侠 · 熔核反应堆主题:熔金(#FFC93C)→橙(#FF7A3D)→熔红(#F5484D),只用于核心/进度/主按钮
@@ -518,6 +547,18 @@
             objectids.push(...scanIds(location.href));
             objectids.push(...scanIds(document.documentElement.outerHTML.slice(0, 2000000)));
             deepScanIframes(document, 0, objectids);
+
+            // 响应嗅探器截获的 ID(资料页列表接口的数据),顶层和同源 iframe 都收
+            try {
+                if (window.__cxdFileIds && window.__cxdFileIds.size) objectids.push(...window.__cxdFileIds);
+                for (const f of document.querySelectorAll("iframe")) {
+                    try {
+                        const w = f.contentWindow;
+                        if (w && w.__cxdFileIds && w.__cxdFileIds.size) objectids.push(...w.__cxdFileIds);
+                    } catch (err) {}
+                }
+            } catch (err) {}
+
             objectids = [...new Set(objectids)];
 
             if (objectids.length === 0) {
@@ -1269,7 +1310,8 @@
 
 
     // --- UI 与事件监听 ---
-    // 超星快递侠 反应堆启动器(可拖动,位置自动记忆)
+    // 超星快递侠 反应堆启动器(可拖动,位置自动记忆;仅顶层窗口挂载,子 iframe 只负责嗅探)
+    if (window.self === window.top) {
     var buttonContainer = document.createElement('div');
     buttonContainer.className = 'cxd-launcher-wrap';
 
@@ -1294,10 +1336,17 @@
 
     buttonContainer.appendChild(downloadButton);
     buttonContainer.appendChild(launcherTag);
-    document.body.appendChild(buttonContainer);
+    const cxdMountLauncher = () => document.body.appendChild(buttonContainer);
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", cxdMountLauncher);
+    } else {
+        cxdMountLauncher();
+    }
+    } // 结束顶层窗口 UI 挂载
 
     // 反应堆光环:显示当前下载进度(null = 回到待机彗星弧)
     function setOrbProgress(pct) {
+        if (!buttonContainer) return;
         const bar = buttonContainer.querySelector('.ring-progress');
         const pctText = buttonContainer.querySelector('.cxd-orb-pct');
         if (!bar || !pctText) return;
@@ -1312,7 +1361,8 @@
         }
     }
 
-    // 启动器拖动:拖动/点击智能区分,靠边吸附,位置记忆
+    // 启动器拖动:拖动/点击智能区分,靠边吸附,位置记忆(仅顶层窗口)
+    if (window.self === window.top) {
     (function initLauncherDrag() {
         let sx, sy, ox, oy, dragging = false;
         const SNAP = 28;
@@ -1379,6 +1429,7 @@
             }
         } catch (err) {}
     })();
+    } // 结束顶层窗口逻辑
 
     // Keyboard shortcut (D key for downloading all PDFs directly, Esc to close modal)
     document.addEventListener('keydown', function (e) {
@@ -1407,6 +1458,6 @@
     });
 
 
-    console.log("超星快递侠 v1.5.0 — 学习通资源下载器已加载(全站模式+深挖iframe)");
+    console.log("超星快递侠 v1.6.0 — 学习通资源下载器已加载(全站+响应嗅探)");
 
 })();
