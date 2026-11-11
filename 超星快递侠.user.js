@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         超星快递侠 - 学习通资源下载器
 // @namespace    https://github.com/zhuzhuxia-gaoshou
-// @version      1.6.0
+// @version      1.6.1
 // @description  超星学习通资源下载器:PPT/PDF/视频批量下载,云盘文件签名直链,失败自动切换浏览器原生下载。熔核反应堆 UI,可拖动,光环实时显示派送进度。
 // @author       zhuzhuxia-gaoshou
 // @match        *://*.chaoxing.com/*
@@ -640,11 +640,28 @@
         };
 
         try {
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            const json = await response.json();
+            // 用特权通道查询(mooc2-ans 等页面上访问 mooc1 接口是跨域的,普通 fetch 会被 CORS 拦截)
+            const json = await new Promise((resolve, reject) => {
+                if (typeof GM_xmlhttpRequest !== "undefined") {
+                    GM_xmlhttpRequest({
+                        method: "GET",
+                        url,
+                        timeout: 20000,
+                        onload: (r) => {
+                            if (r.status !== 200) return reject(new Error("HTTP " + r.status));
+                            try { resolve(JSON.parse(r.responseText)); }
+                            catch (e) { reject(new Error("响应不是有效 JSON")); }
+                        },
+                        onerror: () => reject(new Error("网络错误或跨域被拦截")),
+                        ontimeout: () => reject(new Error("请求超时"))
+                    });
+                } else {
+                    fetch(url).then(r => {
+                        if (!r.ok) throw new Error("HTTP " + r.status);
+                        return r.json();
+                    }).then(resolve).catch(reject);
+                }
+            });
             resource.size = typeof json.size === 'number' ? json.size : null;
             // console.log("Fetched info for", objectid, json);
 
@@ -1458,6 +1475,6 @@
     });
 
 
-    console.log("超星快递侠 v1.6.0 — 学习通资源下载器已加载(全站+响应嗅探)");
+    console.log("超星快递侠 v1.6.1 — 学习通资源下载器已加载(全站+响应嗅探+跨域查询)");
 
 })();
