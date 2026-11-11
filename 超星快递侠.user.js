@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         超星快递侠 - 学习通资源下载器
 // @namespace    https://github.com/zhuzhuxia-gaoshou
-// @version      1.2.0
+// @version      1.3.0
 // @description  超星学习通资源下载器:PPT/PDF/视频批量下载,云盘文件签名直链,失败自动切换浏览器原生下载。熔核反应堆 UI,可拖动,光环实时显示派送进度。
 // @author       zhuzhuxia-gaoshou
-// @match        *://*/*mycourse/studentstudy*
-// @match        *://*/*nodedetailcontroller/*
-// @match        *://*/*mycourse/teacherstudy*
+// @match        *://*.chaoxing.com/*
+// @match        *://*.xueyinonline.com/*
+// @noframes
 // @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addStyle
@@ -480,6 +480,22 @@
                  }
             }
         }
+        // 兜底:没有标准资源容器时(如"资料"列表页),
+        // 从整个页面的链接、iframe 地址和原始 HTML 里提取 objectid
+        if (objectids.length === 0) {
+            const html = document.documentElement.outerHTML;
+            const patterns = [
+                /(?:\?|&)[Oo]bject[Ii]d=([0-9a-fA-F]{32})/g,
+                /\/ananas\/(?:iframe|video|read)\/([0-9a-fA-F]{32})/g
+            ];
+            for (const re of patterns) {
+                let m;
+                while ((m = re.exec(html)) !== null) objectids.push(m[1]);
+            }
+            objectids = [...new Set(objectids)];
+            console.log("兜底扫描找到的 objectid:", objectids);
+        }
+
         // Remove duplicates
         objectids = [...new Set(objectids)];
         console.log("找到的所有任务对象IDs:", objectids);
@@ -1349,6 +1365,6 @@
     });
 
 
-    console.log("超星快递侠 v1.2.0 — 学习通资源下载器已加载");
+    console.log("超星快递侠 v1.3.0 — 学习通资源下载器已加载(全站模式)");
 
 })();
