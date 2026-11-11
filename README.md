@@ -18,7 +18,7 @@
 ## 安装
 
 1. 浏览器安装 [Tampermonkey](https://www.tampermonkey.net/) 扩展
-2. 打开 Tampermonkey 管理面板 → 点击「+」新建脚本 → 粘贴 [`Download.js`](./Download.js) 的全部内容 → `Ctrl + S` 保存
+2. 打开 Tampermonkey 管理面板 → 点击「+」新建脚本 → 粘贴 [`超星快递侠.user.js`](./超星快递侠.user.js) 的全部内容 → `Ctrl + S` 保存
 3. 打开超星课程学习页面，左侧出现发光的反应堆启动器即安装成功
 
 ## 使用
